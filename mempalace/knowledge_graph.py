@@ -294,13 +294,32 @@ class KnowledgeGraph:
                     (obj_id, obj),
                 )
 
-                # Check for existing identical triple
+                # Dedupe only when an existing currently-valid row has the
+                # same provenance and temporal stamp. A new ``valid_from`` or
+                # a new ``source_drawer_id`` is fresh evidence and must be
+                # represented as its own row so the verbatim chain stays
+                # traceable. See bug report on provenance-loss for context.
                 existing = conn.execute(
-                    "SELECT id FROM triples WHERE subject=? AND predicate=? AND object=? AND valid_to IS NULL",
-                    (sub_id, pred, obj_id),
+                    """SELECT id FROM triples
+                       WHERE subject=? AND predicate=? AND object=? AND valid_to IS NULL
+                         AND IFNULL(valid_from,'')=IFNULL(?, '')
+                         AND IFNULL(source_drawer_id,'')=IFNULL(?, '')
+                         AND IFNULL(source_closet,'')=IFNULL(?, '')
+                         AND IFNULL(source_file,'')=IFNULL(?, '')
+                         AND IFNULL(adapter_name,'')=IFNULL(?, '')""",
+                    (
+                        sub_id,
+                        pred,
+                        obj_id,
+                        valid_from,
+                        source_drawer_id,
+                        source_closet,
+                        source_file,
+                        adapter_name,
+                    ),
                 ).fetchone()
                 if existing:
-                    return existing["id"]  # Already exists and still valid
+                    return existing["id"]  # Truly identical re-assertion.
 
                 triple_id = f"t_{sub_id}_{pred}_{obj_id}_{hashlib.sha256(f'{valid_from}{datetime.now().isoformat()}'.encode()).hexdigest()[:12]}"
                 conn.execute(

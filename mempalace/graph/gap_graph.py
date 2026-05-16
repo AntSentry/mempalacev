@@ -54,10 +54,16 @@ def ensure_gap_schema(conn: sqlite3.Connection) -> None:
         INSERT OR IGNORE INTO gap_event_transitions (from_status, to_status, actor, allowed, requires_evidence) VALUES
         ('open', 'resolved', 'system', 1, 1),
         ('open', 'dismissed', 'system', 1, 0),
+        ('open', 'superseded', 'system', 1, 1),
+        ('open', 'rejected', 'system', 1, 0),
         ('open', 'resolved', 'user', 1, 1),
         ('open', 'dismissed', 'user', 1, 0),
+        ('open', 'superseded', 'user', 1, 1),
+        ('open', 'rejected', 'user', 1, 0),
         ('resolved', 'open', 'user', 1, 0),
-        ('dismissed', 'open', 'user', 1, 0);
+        ('dismissed', 'open', 'user', 1, 0),
+        ('superseded', 'open', 'user', 1, 0),
+        ('rejected', 'open', 'user', 1, 0);
 
         CREATE TABLE IF NOT EXISTS gap_events (
             id TEXT PRIMARY KEY,
@@ -90,12 +96,20 @@ def ensure_gap_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_gap_events_chain ON gap_events(supersession_chain_id);
         """
     )
-    _ensure_columns(conn, "triples", {
-        "relation_class": "TEXT",
-        "polarity": "INTEGER DEFAULT 1",
-        "supersedes_triple_id": "TEXT",
-        "supersession_chain_id": "TEXT",
-    })
+    if _table_exists(conn, "triples"):
+        _ensure_columns(conn, "triples", {
+            "relation_class": "TEXT",
+            "polarity": "INTEGER DEFAULT 1",
+            "supersedes_triple_id": "TEXT",
+            "supersession_chain_id": "TEXT",
+        })
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone()
+    return row is not None
 
 
 def _ensure_columns(conn: sqlite3.Connection, table: str, columns: Dict[str, str]) -> None:

@@ -177,7 +177,13 @@ _STALE_STATUSES = ("superseded", "rejected")
 
 
 def _compute_stale(gap_graph: Any, entity_ids: Set[str]) -> Set[str]:
-    """Drawer ids referenced by gap_events with stale status touching the query."""
+    """Drawer ids referenced by gap_events with stale status touching the query.
+
+    Only ``old_drawer_id`` is treated as stale — that is the retired evidence
+    whose claim the gap supersedes or rejects. ``new_drawer_id`` holds the
+    replacement evidence and ``evidence_drawer_id`` records the resolution
+    citation; both are live and must remain eligible to support.
+    """
     if gap_graph is None or not entity_ids:
         return set()
     conn = _gap_connection(gap_graph)
@@ -188,10 +194,9 @@ def _compute_stale(gap_graph: Any, entity_ids: Set[str]) -> Set[str]:
             subject = (row.get("subject") or "").lower()
             if subject not in entity_ids:
                 continue
-            for key in ("old_drawer_id", "new_drawer_id", "evidence_drawer_id"):
-                did = row.get(key)
-                if did:
-                    stale.add(str(did))
+            did = row.get("old_drawer_id")
+            if did:
+                stale.add(str(did))
     return stale
 
 

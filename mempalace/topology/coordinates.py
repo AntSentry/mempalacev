@@ -67,10 +67,27 @@ def canonical_validity(valid_from: str, valid_to: Optional[str]) -> bytes:
     return f"{valid_from or ''}\0{valid_to or ''}".encode("utf-8")
 
 
+_BLAKE2B_MAX_KEY = 64
+
+
+def _coerce_salt(salt: bytes) -> bytes:
+    """Reduce an over-long palace salt to a deterministic 64-byte key.
+
+    BLAKE2b accepts keys up to 64 bytes. When callers pass a longer salt
+    (e.g. a passphrase or concatenated identifier), hash it down to the
+    max key size so the coordinate function never crashes. The reduction
+    is itself BLAKE2b, so it stays deterministic and salt-isolated.
+    """
+    if len(salt) <= _BLAKE2B_MAX_KEY:
+        return salt
+    return hashlib.blake2b(salt, digest_size=_BLAKE2B_MAX_KEY).digest()
+
+
 def topology_coord(value_bytes: bytes, salt: bytes) -> int:
     """Return ``blake2b(value_bytes, key=salt, digest_size=4)`` as uint mod 18."""
 
-    digest = hashlib.blake2b(value_bytes, key=salt, digest_size=4).digest()
+    key = _coerce_salt(salt)
+    digest = hashlib.blake2b(value_bytes, key=key, digest_size=4).digest()
     return int.from_bytes(digest, "big") % 18
 
 
