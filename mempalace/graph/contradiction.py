@@ -112,9 +112,23 @@ def find_contradictions(
     """
     _ensure_triple_columns(conn)
     if polarity_required:
-        comparator = "COALESCE(t1.polarity, 1) <> COALESCE(t2.polarity, 1)"
+        # Polarity-aware mode: same object, opposing polarities.
+        # Without the object-equality guard, compatible facts on different
+        # objects (e.g. "lives_in paris +1" vs "NOT lives_in london -1")
+        # would be flagged as a contradiction.
+        comparator = (
+            "t1.object = t2.object "
+            "AND COALESCE(t1.polarity, 1) <> COALESCE(t2.polarity, 1)"
+        )
     else:
-        comparator = "t1.object <> t2.object"
+        # Object-mode: different objects asserted by triples that agree on
+        # polarity. Without the polarity-agreement guard, an opposite-
+        # polarity assertion on a different object (one says yes about X,
+        # the other says no about Y) would be silently treated as agreement.
+        comparator = (
+            "t1.object <> t2.object "
+            "AND COALESCE(t1.polarity, 1) = COALESCE(t2.polarity, 1)"
+        )
     rows = conn.execute(
         f"""
         SELECT

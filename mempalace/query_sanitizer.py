@@ -69,6 +69,10 @@ def sanitize_query(raw_query: str) -> dict:
     original_length = len(raw_query)
 
     def _strip_wrapping_quotes(candidate: str) -> str:
+        # Strip only paired wrapping quotes — never an unmatched leading
+        # or trailing quote, which is almost always part of the content
+        # (closing quote of an embedded phrase, possessive apostrophe,
+        # etc.). Mutating it silently distorts verbatim recall.
         candidate = candidate.strip()
         while (
             len(candidate) >= 2 and candidate[:1] in QUOTE_CHARS and candidate[:1] == candidate[-1:]
@@ -76,10 +80,6 @@ def sanitize_query(raw_query: str) -> dict:
             candidate = candidate[1:-1].strip()
             if not candidate:
                 return ""
-        if candidate[:1] in QUOTE_CHARS:
-            candidate = candidate[1:].strip()
-        if candidate[-1:] in QUOTE_CHARS:
-            candidate = candidate[:-1].strip()
         return candidate
 
     def _trim_candidate(candidate: str) -> str:

@@ -201,7 +201,16 @@ def _compute_stale(gap_graph: Any, entity_ids: Set[str]) -> Set[str]:
 
 
 def _compute_contradicting(knowledge_graph: Any, entity_ids: Set[str]) -> Set[str]:
-    """Drawer ids whose triples currently contradict another currently-valid triple."""
+    """Drawer ids whose triples currently contradict another currently-valid triple.
+
+    When two same-(subject, predicate) triples disagree on the object but
+    have different ``valid_from`` stamps, only the older one is treated as
+    contradicting. The newest assertion is interpreted as the current
+    answer and remains eligible for ``supporting`` — this prevents
+    time-evolving facts (Alice moved from Paris to London) from emptying
+    the supporting partition on the default KG path, where ``add_triple``
+    does not auto-close prior ``valid_to``.
+    """
     if knowledge_graph is None or not entity_ids:
         return set()
     conn = _kg_connection(knowledge_graph)
@@ -216,7 +225,8 @@ def _compute_contradicting(knowledge_graph: Any, entity_ids: Set[str]) -> Set[st
     if not contradictions:
         return set()
 
-    triple_ids = set()
+    # Collect the candidate triple_ids that touch the query entities.
+    triple_ids: Set[str] = set()
     for c in contradictions:
         if c.subject in entity_ids:
             triple_ids.add(c.first_triple_id)
@@ -226,21 +236,55 @@ def _compute_contradicting(knowledge_graph: Any, entity_ids: Set[str]) -> Set[st
 
     placeholders = ",".join(["?"] * len(triple_ids))
     rows = conn.execute(
-        f"SELECT id, source_drawer_id, source_closet, source_file "
+        f"SELECT id, subject, predicate, valid_from, "
+        f"source_drawer_id, source_closet, source_file "
         f"FROM triples WHERE id IN ({placeholders})",
         list(triple_ids),
     ).fetchall()
-    out: Set[str] = set()
+
+    # Per-(subject, predicate) groupings; identify the newest valid_from
+    # so we can demote older rows to ``contradicting`` and let the newest
+    # one drift back into ``supporting``.
+    by_key: dict[tuple, list[dict]] = {}
+    rows_by_id: dict[str, dict] = {}
     for row in rows:
-        did = (
-            row["source_drawer_id"]
-            if "source_drawer_id" in row.keys()
-            else None
-        )
-        if not did and "source_closet" in row.keys():
-            did = row["source_closet"]
-        if not did and "source_file" in row.keys():
-            did = row["source_file"]
+        row_d = dict(row)
+        rows_by_id[row_d["id"]] = row_d
+        by_key.setdefault((row_d["subject"], row_d["predicate"]), []).append(row_d)
+
+    losers: Set[str] = set()
+    for c in contradictions:
+        if c.subject not in entity_ids:
+            continue
+        group = by_key.get((c.subject, c.predicate)) or []
+        if not group:
+            continue
+        latest_vf = max(((r.get("valid_from") or "") for r in group), default="")
+        for r in group:
+            row_vf = r.get("valid_from") or ""
+            # Demote rows whose valid_from is strictly older than the
+            # latest. Ties (e.g. two rows on the same day, or both
+            # missing valid_from) keep every member flagged so genuine
+            # simultaneous conflicts still surface.
+            if latest_vf and row_vf and row_vf < latest_vf:
+                losers.add(r["id"])
+            elif not latest_vf:
+                # Group has no valid_from anywhere — treat as simultaneous.
+                losers.add(r["id"])
+            elif not row_vf:
+                # This row has no valid_from while others do — older.
+                losers.add(r["id"])
+
+    out: Set[str] = set()
+    for triple_id in losers:
+        row = rows_by_id.get(triple_id)
+        if not row:
+            continue
+        did = row.get("source_drawer_id")
+        if not did:
+            did = row.get("source_closet")
+        if not did:
+            did = row.get("source_file")
         if did:
             out.add(str(did))
     return out

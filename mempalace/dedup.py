@@ -99,13 +99,20 @@ def dedup_source_group(col, drawer_ids, threshold=DEFAULT_THRESHOLD, dry_run=Tru
             continue
 
         try:
+            kept_ids_set = {k[0] for k in kept}
+            # Ask for enough neighbours that every already-kept item can
+            # plausibly appear in the top of the result. The old cap of
+            # ``min(len(kept), 5)`` silently missed real duplicates when
+            # the candidate's nearest few neighbours were all other
+            # same-source-group rows pending deletion — the kept duplicate
+            # could sit just outside the cap and never be checked.
+            n_results = min(max(len(kept_ids_set) * 2, 50), 200)
             results = col.query(
                 query_texts=[doc],
-                n_results=min(len(kept), 5),
+                n_results=n_results,
                 include=["distances"],
             )
             dists = results["distances"][0] if results["distances"] else []
-            kept_ids_set = {k[0] for k in kept}
 
             is_dup = False
             for rid, dist in zip(results["ids"][0], dists):
