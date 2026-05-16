@@ -393,3 +393,76 @@ Force a reconnect to the palace database. Use this after external scripts or CLI
 **Parameters:** None
 
 **Returns:** `{ success, message, drawers, vector_disabled[, vector_disabled_reason] }` (on no-palace: `{ success: false, message, drawers, vector_disabled }`; on exception: `{ success: false, error }`)
+
+---
+
+## Topology Layer Tools
+
+These tools belong to the experimental topology layer. All are gated by env flags (default off) and require explicit opt-in. Retrieval-quality effects are not claimed; see `MEMPALACE_TOPOLOGY_SPEC.md` for status.
+
+### `mempalace_gap_list`
+
+List knowledge-graph gap events — transitions, supersessions, and unresolved contradictions tracked in the gap graph. Gated by `MEMPALACE_ENABLE_GAP_GRAPH=1`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `subject` | string | No | Filter to gap events whose subject matches |
+| `gap_type` | string | No | Filter by status: `open`, `resolved`, `superseded`, `rejected` |
+| `limit` | integer | No | Maximum events returned (default: 20) |
+
+**Returns:** list of gap event records (or `{ error: "mempalace_gap_list requires MEMPALACE_ENABLE_GAP_GRAPH=1" }` when the flag is off)
+
+---
+
+### `mempalace_gap_resolve`
+
+Transition a gap event with required evidence. Validates against the gap-event state-machine table; rejects illegal transitions. Gated by `MEMPALACE_ENABLE_GAP_GRAPH=1`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `gap_id` | string | **Yes** | The id of the gap event to transition |
+| `to_status` | string | **Yes** | Target status: `resolved`, `superseded`, `rejected`, or `open` (re-open) |
+| `evidence_drawer_id` | string | No | Drawer id documenting the resolution (required for most transitions) |
+| `rationale` | string | No | Free-text rationale, persisted with the transition |
+| `status` | string | No | Alias for `to_status` |
+| `note` | string | No | Alias for `rationale` |
+
+**Returns:** updated gap event record, or `{ success: false, error: ... }` on illegal transition or when flag is off
+
+---
+
+### `mempalace_trace_recall`
+
+Return a retrieval trace showing which routes surfaced each memory. The trace includes per-route attribution, the top result, supporting / contradicting / stale partitions, and a confidence label. Gated by `MEMPALACE_ENABLE_TRACE=1`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | **Yes** | The query text to trace |
+| `wing` | string | No | Restrict trace to a wing |
+| `k` | integer | No | Top-K results to attribute (default: 10) |
+| `include_stale` | boolean | No | Include stale drawers in the returned trace (default: false) |
+| `limit` | integer | No | Maximum result count (alias for `k`) |
+
+**Returns:** `{ query, top_drawer_id, routes: [{ route, rank, reason, raw_score }], supporting: [drawer_id], contradicting: [drawer_id], stale: [drawer_id], confidence }`. Raises `NotImplementedError` when the flag is off.
+
+---
+
+### `mempalace_search_with_mode`
+
+Search the palace using one of the closed-form query modes from RFC T3b. The mode selects a deterministic combination of step size, ray count, polarity filter, and status filter; the unbounded query string is replaced by a small named palette of query shapes. Gated by `MEMPALACE_ENABLE_QUERY_MODES=1`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mode` | string | **Yes** | One of: `direct_recall`, `summary_view`, `contrast_view`, `mirror_view`, `family_view`, `polar_view` |
+
+**Returns:** list of ranked candidates filtered/shaped per the selected mode, or `{ error: "mempalace_search_with_mode requires MEMPALACE_ENABLE_QUERY_MODES=1" }` when the flag is off.
+
+---
+
+### `mempalace_list_query_modes`
+
+List the closed-form query modes available at the MCP boundary together with their flag-set mappings (RFC T3b). Use this to discover what `mempalace_search_with_mode` accepts. Gated by `MEMPALACE_ENABLE_QUERY_MODES=1`.
+
+**Parameters:** None
+
+**Returns:** list of `{ mode, description, flags }` entries, or `{ error: "mempalace_list_query_modes requires MEMPALACE_ENABLE_QUERY_MODES=1" }` when the flag is off.

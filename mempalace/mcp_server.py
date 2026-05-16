@@ -1373,6 +1373,141 @@ def tool_kg_stats():
     return _call_kg(lambda kg: kg.stats())
 
 
+def tool_gap_list(subject: str = None, status: str = "open", gap_type: str = None, limit: int = 50):
+    """List gap graph events from the knowledge graph database."""
+    if os.environ.get("MEMPALACE_ENABLE_GAP_GRAPH", "").lower() not in {"1", "true", "yes", "on"}:
+        return {"error": "mempalace_gap_list requires MEMPALACE_ENABLE_GAP_GRAPH=1"}
+    if status not in ("open", "resolved", "dismissed", ""):
+        return {"error": "status must be open, resolved, dismissed, or empty"}
+
+    def _list(kg):
+        from .graph.gap_graph import list_gap_events
+
+        return list_gap_events(kg._conn(), status=status, gap_type=gap_type, limit=limit, subject=subject)
+
+    gaps = _call_kg(_list)
+    return {"gaps": gaps, "count": len(gaps), "status": status or "all", "gap_type": gap_type, "subject": subject}
+
+
+def tool_gap_resolve(
+    event_id: str = None,
+    to_status: str = "resolved",
+    evidence_drawer_id: str = None,
+    rationale: str = None,
+    gap_id: str = None,
+    status: str = None,
+    note: str = None,
+):
+    """Resolve, dismiss, or reopen a gap graph event."""
+    if os.environ.get("MEMPALACE_ENABLE_GAP_GRAPH", "").lower() not in {"1", "true", "yes", "on"}:
+        return {"success": False, "error": "mempalace_gap_resolve requires MEMPALACE_ENABLE_GAP_GRAPH=1"}
+    event_id = event_id or gap_id
+    to_status = status or to_status
+    rationale = rationale if rationale is not None else note
+    if not event_id:
+        return {"success": False, "error": "event_id is required"}
+    if to_status not in ("resolved", "dismissed", "open"):
+        return {"success": False, "error": "status must be resolved, dismissed, or open"}
+
+    def _resolve(kg):
+        from .graph.gap_graph import transition_gap_event
+
+        conn = kg._conn()
+        with conn:
+            return transition_gap_event(
+                conn,
+                event_id,
+                to_status=to_status,
+                evidence_drawer_id=evidence_drawer_id,
+                rationale=rationale,
+            )
+
+    try:
+        changed = _call_kg(_resolve)
+        return {"success": bool(changed), "event_id": event_id, "status": to_status}
+    except ValueError as exc:
+        return {"success": False, "event_id": event_id, "error": str(exc)}
+
+
+def tool_trace_recall(query: str = "", wing: str = None, k: int = 10, include_stale: bool = False, limit: int = None):
+    """Run traced recall and return an evidence-pack payload."""
+    if os.environ.get("MEMPALACE_ENABLE_TRACE", "").lower() not in {"1", "true", "yes", "on"}:
+        raise NotImplementedError("mempalace_trace_recall requires MEMPALACE_ENABLE_TRACE=1")
+    from .evidence.evidence_pack import build_evidence_pack, is_answerable
+    from .retrieval.trace import build_trace, serialize_trace
+    from .searcher import search_memories
+
+    limit = limit or k
+    result = search_memories(query, _config.palace_path, wing=wing, n_results=limit)
+    candidates = result.get("candidate_pool") or result.get("results", [])
+    pack = build_evidence_pack(query, candidates)
+    trace = build_trace(query, candidates, pack)
+    return {"query": query, "answerable": is_answerable(pack), "evidence_pack": pack.__dict__, "trace": serialize_trace(trace)}
+
+
+def tool_search_with_mode(query: str, mode: str, wing: str = None, k: int = 10):
+    """Closed-form query mode at the MCP boundary (RFC T3b).
+
+    Six named query shapes mapped to deterministic flag-sets. Gated by
+    ``MEMPALACE_ENABLE_QUERY_MODES=1``.
+    """
+
+    if os.environ.get("MEMPALACE_ENABLE_QUERY_MODES", "").lower() not in {"1", "true", "yes", "on"}:
+        return {
+            "error": "mempalace_search_with_mode requires MEMPALACE_ENABLE_QUERY_MODES=1",
+            "implemented": False,
+        }
+    from .retrieval.query_modes import apply_mode_to_results, resolve_mode
+
+    try:
+        flags = resolve_mode(mode)
+    except ValueError as exc:
+        return {"error": str(exc), "mode": mode}
+
+    try:
+        wing = _sanitize_optional_name(wing, "wing")
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    sanitized = sanitize_query(query)
+    _refresh_vector_disabled_flag()
+    raw = search_memories(
+        sanitized["clean_query"],
+        palace_path=_config.palace_path,
+        wing=wing,
+        n_results=max(k, 5),
+        vector_disabled=_vector_disabled,
+        collection_name=_config.collection_name,
+    )
+    candidates = raw.get("results", []) if isinstance(raw, dict) else []
+    shaped = apply_mode_to_results(candidates, flags, k=k)
+    return {
+        "query": query,
+        "mode": mode,
+        "mode_flags": {
+            "step_size": flags.step_size,
+            "ray_count": flags.ray_count,
+            "polarity_filter": flags.polarity_filter,
+            "status_filter": flags.status_filter,
+        },
+        "results": shaped,
+        "count": len(shaped),
+    }
+
+
+def tool_list_query_modes(wing: str = None):
+    """List all closed-form query modes and their flag-sets (RFC T3b)."""
+
+    if os.environ.get("MEMPALACE_ENABLE_QUERY_MODES", "").lower() not in {"1", "true", "yes", "on"}:
+        return {
+            "error": "mempalace_list_query_modes requires MEMPALACE_ENABLE_QUERY_MODES=1",
+            "implemented": False,
+        }
+    from .retrieval.query_modes import list_modes
+
+    return {"wing": wing, "modes": list_modes()}
+
+
 # ==================== AGENT DIARY ====================
 
 
@@ -1814,6 +1949,85 @@ TOOLS = {
         "description": "Knowledge graph overview: entities, triples, current vs expired facts, relationship types.",
         "input_schema": {"type": "object", "properties": {}},
         "handler": tool_kg_stats,
+    },
+    "mempalace_gap_list": {
+        "description": "List knowledge-graph gap events such as conservative contradiction detections.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "description": "open, resolved, dismissed, or empty for all"},
+                "subject": {"type": "string", "description": "Optional subject entity id filter"},
+                "gap_type": {"type": "string", "description": "Optional gap type filter"},
+                "limit": {"type": "integer", "description": "Maximum events to return"},
+            },
+        },
+        "handler": tool_gap_list,
+    },
+    "mempalace_gap_resolve": {
+        "description": "Resolve, dismiss, or reopen a knowledge-graph gap event.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "event_id": {"type": "string", "description": "Gap event id"},
+                "to_status": {"type": "string", "description": "resolved, dismissed, or open"},
+                "evidence_drawer_id": {"type": "string", "description": "Evidence drawer id required for resolved transitions"},
+                "rationale": {"type": "string", "description": "Transition rationale"},
+                "gap_id": {"type": "string", "description": "Backward-compatible alias for event_id"},
+                "status": {"type": "string", "description": "Backward-compatible alias for to_status"},
+                "note": {"type": "string", "description": "Backward-compatible alias for rationale"},
+            },
+            "required": [],
+        },
+        "handler": tool_gap_resolve,
+    },
+    "mempalace_trace_recall": {
+        "description": "Trace recall stub. Raises NotImplementedError until trace evidence packs ship.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Query to trace"},
+                "wing": {"type": "string", "description": "Optional wing filter"},
+                "k": {"type": "integer", "description": "Maximum trace items"},
+                "include_stale": {"type": "boolean", "description": "Whether stale evidence may be included"},
+                "limit": {"type": "integer", "description": "Backward-compatible alias for k"},
+            },
+        },
+        "handler": tool_trace_recall,
+    },
+    "mempalace_search_with_mode": {
+        "description": "Closed-form query mode at the MCP boundary (RFC T3b). Pass one of: direct_recall, summary_view, contrast_view, mirror_view, family_view, polar_view. Gated by MEMPALACE_ENABLE_QUERY_MODES=1.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+                "mode": {
+                    "type": "string",
+                    "description": "One of: direct_recall, summary_view, contrast_view, mirror_view, family_view, polar_view",
+                    "enum": [
+                        "direct_recall",
+                        "summary_view",
+                        "contrast_view",
+                        "mirror_view",
+                        "family_view",
+                        "polar_view",
+                    ],
+                },
+                "wing": {"type": "string", "description": "Optional wing filter"},
+                "k": {"type": "integer", "description": "Max results (default 10)"},
+            },
+            "required": ["query", "mode"],
+        },
+        "handler": tool_search_with_mode,
+    },
+    "mempalace_list_query_modes": {
+        "description": "List the closed-form query modes and their flag-sets (RFC T3b). Gated by MEMPALACE_ENABLE_QUERY_MODES=1.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "wing": {"type": "string", "description": "Optional wing filter (currently informational)"},
+            },
+        },
+        "handler": tool_list_query_modes,
     },
     "mempalace_traverse": {
         "description": "Walk the palace graph from a room. Shows connected ideas across wings — the tunnels. Like following a thread through the palace: start at 'chromadb-setup' in wing_code, discover it connects to wing_myproject (planning) and wing_user (feelings about it).",

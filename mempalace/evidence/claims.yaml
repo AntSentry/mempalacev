@@ -1,0 +1,221 @@
+# Initial claim ledger — populated at topology spec Phase 1 adoption.
+
+- id: claim_verbatim_storage
+  text: "MemPalace stores drawer text verbatim — never summarized, paraphrased, or lossy-compressed."
+  status: source_supported
+  evidence:
+    - type: source_repo
+      reference: "CLAUDE.md"
+  publishable: true
+
+- id: claim_append_only
+  text: "MemPalace storage is append-only after initial build."
+  status: source_supported
+  evidence:
+    - type: source_repo
+      reference: "CLAUDE.md"
+  publishable: true
+
+- id: claim_local_first
+  text: "MemPalace operates local-first; no external APIs are required by default."
+  status: source_supported
+  evidence:
+    - type: source_repo
+      reference: "CLAUDE.md"
+  publishable: true
+
+- id: claim_digital_root_modulo_9
+  text: "Digital root reduction is arithmetic modulo 9, with digit 9 representing residue 0."
+  status: proven
+  evidence:
+    - type: proof
+      reference: "MEMPALACE_TOPOLOGY_SPEC.md §6.2"
+  publishable: true
+
+- id: claim_topology_coord_deterministic
+  text: "Topology coordinates are deterministic — same drawer plus same palace salt yields the same coordinates."
+  status: experimental
+  evidence:
+    - type: none
+      reference: "Pending implementation-supported test evidence."
+  publishable: false
+
+- id: claim_rrf_source_supported
+  text: "Reciprocal Rank Fusion is a published rank-fusion method described by Cormack, Clarke, and Büttcher."
+  status: source_supported
+  evidence:
+    - type: proof
+      reference: "Cormack, Clarke, Büttcher. Reciprocal Rank Fusion outperforms Condorcet and Individual Rank Learning Methods. SIGIR 2009."
+  publishable: true
+
+- id: claim_topology_routes_improve_recall
+  text: "Topology axis routes improve held-out retrieval recall."
+  status: experimental
+  evidence:
+    - type: none
+      reference: "Pending held-out evaluation."
+  publishable: false
+
+- id: claim_gap_reduces_stale_answers
+  text: "Gap graph reduces stale-fact answers in current-state queries."
+  status: experimental
+  evidence:
+    - type: integration_test
+      reference: "tests/test_gap_graph.py::test_auto_detection_end_to_end"
+  publishable: false
+
+- id: claim_balanced_wakeup_improves_session_start
+  text: "Balanced wake-up improves session-start task success over importance-ranked wake-up."
+  status: experimental
+  evidence:
+    - type: none
+      reference: "Pending task benchmark."
+  publishable: false
+
+- id: claim_physical_effects_rejected
+  text: "Physical-energy, propulsion, biomedical, or empirical-resonance claims are excluded from MemPalace's topology design."
+  status: source_supported
+  evidence:
+    - type: proof
+      reference: "MEMPALACE_TOPOLOGY_SPEC.md §1.3"
+  publishable: true
+
+- id: claim_schema_migrations_reversible
+  text: "MemPalace topology schema migrations are reversible through the schema migration runner."
+  status: impl
+  evidence:
+    - type: unit_test
+      reference: "tests/test_migrations.py::test_schema_migrations_apply_and_rollback"
+  publishable: true
+
+- id: claim_gap_graph_feature_gated
+  text: "Gap graph writes are gated by the MEMPALACE_ENABLE_GAP_GRAPH environment flag."
+  status: impl
+  evidence:
+    - type: unit_test
+      reference: "tests/test_gap_graph.py::test_gap_graph_flag_parsing"
+  publishable: true
+
+- id: claim_trace_recall_stub_unavailable
+  text: "The trace recall MCP tool is a non-claiming stub until trace evidence packs ship."
+  status: impl
+  evidence:
+    - type: unit_test
+      reference: "tests/test_gap_mcp_tools.py::test_mempalace_trace_recall_stub_raises"
+  publishable: true
+
+- id: claim_gap_state_machine_enforced
+  text: "Gap graph lifecycle transitions are enforced by a state-machine table."
+  status: impl
+  evidence:
+    - type: unit_test
+      reference: "tests/test_gap_graph.py::test_transition_illegal_rejected"
+  publishable: true
+
+- id: claim_evidence_pack_disjoint
+  text: "Evidence pack supporting/contradicting/stale partitions are pairwise disjoint by construction."
+  status: impl
+  evidence:
+    - type: unit_test
+      reference: "tests/test_evidence_pack_disjoint_property.py::test_evidence_pack_partitions_pairwise_disjoint"
+  publishable: true
+
+- id: claim_topology_shells_real_backend
+  text: "Topology shells expand a real center drawer through real backends (collection, KG, tunnels, gap_events) rather than fabricated drawer ids."
+  status: impl
+  evidence:
+    - type: integration_test
+      reference: "tests/test_shells.py::test_shell_radius_semantics_with_real_backends"
+  publishable: true
+
+- id: claim_axis_routes_real_backend
+  text: "Topology axis-route execution returns drawer ids drawn from the real palace via knowledge-graph and vector retrieval rather than synthetic identifiers."
+  status: impl
+  evidence:
+    - type: integration_test
+      reference: "tests/test_axis_routes.py::test_execute_axis_query_against_real_palace"
+  publishable: true
+
+- id: claim_balanced_wakeup_budget_enforced
+  text: "Balanced wake-up enforces the requested token budget and records dropped slots."
+  status: impl
+  evidence:
+    - type: unit_test
+      reference: "tests/test_balanced_wakeup.py::test_budget_enforced"
+  publishable: true
+
+- id: claim_balanced_wakeup_real_slots
+  text: "Each balanced wake-up slot is sourced from a real subsystem (identity file, knowledge graph, gap graph, palace_graph, or diary drawers) rather than a hardcoded placeholder."
+  status: impl
+  evidence:
+    - type: integration_test
+      reference: "tests/test_balanced_wakeup.py::test_slot_active_projects_returns_kg_works_on_triples"
+  publishable: true
+
+- id: claim_ablation_runner_real_metrics
+  text: "The Phase 7 ablation runner sets feature flags per row, invokes real retrieval against a seeded benchmark, and returns measured metrics (not stubbed zeros)."
+  status: impl
+  evidence:
+    - type: unit_test
+      reference: "tests/test_ablation_runner.py::test_jsonl_row_payload_has_real_metrics"
+  publishable: true
+
+- id: claim_evidence_pack_cache_correctness
+  text: "Cached evidence packs are content-addressed on (normalized_query, palace_write_seq) and any palace write invalidates all cached packs."
+  status: impl
+  evidence:
+    - type: unit_test
+      reference: "tests/test_pack_cache.py"
+  publishable: true
+
+- id: claim_query_mode_enum_distinct
+  text: "The closed-form QueryMode enum at the MCP boundary contains six modes whose flag-sets produce distinct retrieval shapes."
+  status: impl
+  evidence:
+    - type: unit_test
+      reference: "tests/test_query_modes.py"
+  publishable: true
+
+- id: claim_learned_rrf_weights_converge
+  text: "Coordinate-descent fitting of RRF route weights converges to bounded weights that rank a perfect route above a noisy route on synthetic training data."
+  status: impl
+  evidence:
+    - type: unit_test
+      reference: "tests/test_learned_weights.py"
+  publishable: true
+
+- id: claim_seal_protocol_enforced
+  text: "The sealed-evaluation runner refuses to re-run on a previously-sealed dataset+commit combination without an explicit emergency-unseal reason of at least 40 characters, which is logged in the contamination ledger."
+  status: impl
+  evidence:
+    - type: unit_test
+      reference: "tests/test_ablation_runner.py::test_seal_refuses_repeat_with_same_dataset_sha"
+    - type: unit_test
+      reference: "tests/test_ablation_runner.py::test_unseal_emergency_requires_long_reason"
+  publishable: true
+
+- id: claim_benchmark_adapters_load_dev_split
+  text: "Public-benchmark adapter scaffolds (LongMemEval, LoCoMo, ConvoMem, MemBench) load a JSONL split and score retrieved drawer ids end-to-end on the local dev split."
+  status: impl
+  evidence:
+    - type: unit_test
+      reference: "tests/test_benchmark_adapters.py::test_adapter_loads_synthetic_jsonl"
+  publishable: true
+
+- id: claim_signoff_required_for_publishable
+  text: "The claims audit, when run with --require-signoffs, fails if a public-facing surface references a publishable claim that lacks a sign-off YAML."
+  status: impl
+  evidence:
+    - type: unit_test
+      reference: "tests/test_signoff.py::test_audit_with_require_signoffs_fails_when_missing"
+    - type: unit_test
+      reference: "tests/test_signoff.py::test_audit_with_require_signoffs_passes_when_present"
+  publishable: true
+
+- id: claim_pre_commit_runs_audit
+  text: "The repository ships a pre-commit hook scaffold that runs the claims audit, ruff, and a fast unit-test subset before allowing a commit."
+  status: impl
+  evidence:
+    - type: source_repo
+      reference: "docs/dev_setup.md"
+  publishable: true

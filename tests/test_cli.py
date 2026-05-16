@@ -12,12 +12,14 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from mempalace.cli import (
+    cmd_claims,
     cmd_compress,
     cmd_hook,
     cmd_init,
     cmd_instructions,
     cmd_mine,
     cmd_repair,
+    cmd_schema,
     cmd_search,
     cmd_split,
     cmd_status,
@@ -143,6 +145,53 @@ def test_cmd_search_error_exits(mock_config_cls):
         with pytest.raises(SystemExit) as exc_info:
             cmd_search(args)
         assert exc_info.value.code == 1
+
+
+# ── cmd_claims ─────────────────────────────────────────────────────────
+
+
+def test_cmd_claims_audit_success(capsys):
+    args = argparse.Namespace(claims_action="audit")
+    report = argparse.Namespace(ok=True, claims_checked=2, files_scanned=3, errors=[])
+    with patch("mempalace.evidence.claims.audit_claims", return_value=report):
+        cmd_claims(args)
+    assert "Claim audit passed" in capsys.readouterr().out
+
+
+def test_cmd_claims_audit_failure_exits(capsys):
+    args = argparse.Namespace(claims_action="audit")
+    report = argparse.Namespace(ok=False, claims_checked=1, files_scanned=1, errors=["bad claim"])
+    with patch("mempalace.evidence.claims.audit_claims", return_value=report):
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_claims(args)
+    assert exc_info.value.code == 1
+    assert "bad claim" in capsys.readouterr().err
+
+
+def test_cmd_schema_migrate_success(capsys, tmp_path):
+    db_path = tmp_path / "kg.sqlite3"
+    args = argparse.Namespace(
+        schema_action="migrate",
+        direction="up",
+        target=None,
+        db=str(db_path),
+        palace=None,
+    )
+    report = argparse.Namespace(
+        direction="up", applied=["0001"], current_version="0001", latest_version="0006"
+    )
+    with patch("mempalace.migrations.runner.apply_migrations", return_value=report):
+        cmd_schema(args)
+    assert "Schema migration complete" in capsys.readouterr().out
+
+
+def test_cmd_schema_status(capsys, tmp_path):
+    db_path = tmp_path / "kg.sqlite3"
+    args = argparse.Namespace(schema_action="status", db=str(db_path), palace=None)
+    status = {"current_version": "0001", "latest_version": "0006", "pending": ["0002"]}
+    with patch("mempalace.migrations.runner.migration_status", return_value=status):
+        cmd_schema(args)
+    assert "pending=0002" in capsys.readouterr().out
 
 
 # ── cmd_instructions ───────────────────────────────────────────────────
@@ -816,6 +865,24 @@ def test_main_instructions_dispatches():
     with (
         patch("sys.argv", ["mempalace", "instructions", "help"]),
         patch("mempalace.cli.cmd_instructions") as mock_cmd,
+    ):
+        main()
+        mock_cmd.assert_called_once()
+
+
+def test_main_claims_audit_dispatches():
+    with (
+        patch("sys.argv", ["mempalace", "claims", "audit"]),
+        patch("mempalace.cli.cmd_claims") as mock_cmd,
+    ):
+        main()
+        mock_cmd.assert_called_once()
+
+
+def test_main_schema_migrate_dispatches():
+    with (
+        patch("sys.argv", ["mempalace", "schema", "migrate", "up"]),
+        patch("mempalace.cli.cmd_schema") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()

@@ -1,0 +1,23 @@
+name: claims-audit
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install 3.11
+      - name: Sync dependencies
+        run: uv sync --extra dev
+      - name: Run claims audit
+        run: uv run mempalace claims audit
+      - name: Verify forbidden phrase scan finds planted violations
+        run: uv run pytest tests/test_claims.py -k forbidden -v

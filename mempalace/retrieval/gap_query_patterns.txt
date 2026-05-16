@@ -1,0 +1,8 @@
+(?i)why did we (switch|change|stop|move|cancel)
+(?i)what (changed|happened to|was)
+(?i)used to
+(?i)current (preference|state|choice|tool)
+(?i)before .* now
+(?i)after .* (we|you|I)
+(?i)no longer
+(?i)(now|currently|today)\b

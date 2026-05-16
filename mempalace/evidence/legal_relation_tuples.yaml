@@ -1,0 +1,63 @@
+# Each entry: predicate, kind, inverse_predicate, symmetric, transitive, notes.
+
+- predicate: married_to
+  kind: reciprocal
+  inverse_predicate: married_to
+  symmetric: true
+  transitive: false
+  notes: "Self-inverse symmetric relation."
+
+- predicate: sibling_of
+  kind: reciprocal
+  inverse_predicate: sibling_of
+  symmetric: true
+  transitive: true
+
+- predicate: child_of
+  kind: complement
+  inverse_predicate: parent_of
+  symmetric: false
+  transitive: false
+
+- predicate: parent_of
+  kind: complement
+  inverse_predicate: child_of
+  symmetric: false
+  transitive: false
+
+- predicate: succeeded_by
+  kind: sequential
+  inverse_predicate: predecessor_of
+  symmetric: false
+  transitive: false
+
+- predicate: predecessor_of
+  kind: sequential
+  inverse_predicate: succeeded_by
+  symmetric: false
+  transitive: false
+
+- predicate: works_on
+  kind: attribution
+  inverse_predicate: null
+  symmetric: false
+  transitive: false
+
+- predicate: prefers
+  kind: attribution
+  inverse_predicate: null
+  symmetric: false
+  transitive: false
+
+- predicate: opposes
+  kind: polar
+  inverse_predicate: opposes
+  symmetric: true
+  transitive: false
+
+- predicate: alternative_to
+  kind: polar
+  inverse_predicate: alternative_to
+  symmetric: true
+  transitive: false
+

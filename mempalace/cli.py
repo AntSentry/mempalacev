@@ -673,8 +673,73 @@ def cmd_search(args):
         sys.exit(1)
 
 
+def cmd_claims(args):
+    """Run claim-ledger commands."""
+    from .evidence.claims import audit_claims
+    from .evidence.signoff import (
+        check_signoffs_for_surfaces,
+        generate_signoff,
+    )
+
+    repo_root = Path(__file__).resolve().parents[1]
+
+    if args.claims_action == "audit":
+        report = audit_claims(repo_root)
+        signoff_errors: list = []
+        if getattr(args, "require_signoffs", False):
+            from .evidence.claims import _public_surface_files
+
+            surfaces = list(_public_surface_files(repo_root))
+            gaps = check_signoffs_for_surfaces(surfaces)
+            for surface, missing_ids in gaps.items():
+                for cid in missing_ids:
+                    signoff_errors.append(
+                        f"missing sign-off for claim {cid!r} referenced in {surface}"
+                    )
+
+        if report.ok and not signoff_errors:
+            print(
+                "Claim audit passed: "
+                f"{report.claims_checked} claims checked, "
+                f"{report.files_scanned} public files scanned."
+            )
+            return
+
+        print("Claim audit failed:", file=sys.stderr)
+        for error in report.errors:
+            print(f"  - {error}", file=sys.stderr)
+        for error in signoff_errors:
+            print(f"  - {error}", file=sys.stderr)
+        raise SystemExit(1)
+
+    if args.claims_action == "signoff":
+        try:
+            out_path = generate_signoff(
+                args.claim_id,
+                args.surface,
+                args.reviewer,
+            )
+        except (KeyError, ValueError, FileNotFoundError) as exc:
+            print(f"Sign-off generation failed: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+        print(f"Sign-off written to {out_path}")
+        return
+
+    raise SystemExit(f"Unknown claims action: {args.claims_action}")
+
+
 def cmd_wakeup(args):
     """Show L0 (identity) + L1 (essential story) — the wake-up context."""
+    if os.environ.get("MEMPALACE_ENABLE_BALANCED_WAKEUP", "").lower() in {"1", "true", "yes", "on"}:
+        from .memory_stack.l1_balanced_wakeup import render_balanced_wakeup
+
+        text = render_balanced_wakeup(wing=args.wing)
+        tokens = len(text) // 4
+        print(f"Balanced wake-up text (~{tokens} tokens):")
+        print("=" * 50)
+        print(text)
+        return
+
     from .layers import MemoryStack
 
     palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
@@ -719,6 +784,37 @@ def cmd_migrate(args):
         palace_path=palace_path,
         dry_run=args.dry_run,
         confirm=getattr(args, "yes", False),
+    )
+
+
+def cmd_schema(args):
+    """Run MemPalace SQLite schema migration commands."""
+    from .migrations.runner import apply_migrations, migration_status
+
+    db_path = os.path.abspath(os.path.expanduser(args.db)) if args.db else None
+    if not db_path:
+        palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+        db_path = os.path.join(palace_path, "knowledge_graph.sqlite3")
+
+    if args.schema_action == "status":
+        status = migration_status(db_path)
+        print(
+            "Schema migrations: "
+            f"current={status['current_version'] or 'none'} "
+            f"latest={status['latest_version'] or 'none'} "
+            f"pending={','.join(status['pending']) or 'none'}"
+        )
+        return
+
+    if args.schema_action != "migrate":
+        raise SystemExit(f"Unknown schema action: {args.schema_action}")
+
+    report = apply_migrations(db_path, direction=args.direction, target=getattr(args, "target", None))
+    applied = ", ".join(report.applied) if report.applied else "none"
+    print(
+        "Schema migration complete: "
+        f"direction={report.direction} applied={applied} "
+        f"current={report.current_version or 'none'} latest={report.latest_version or 'none'}"
     )
 
 
@@ -1414,6 +1510,43 @@ def main():
     for instr_name in ["init", "search", "mine", "help", "status"]:
         instructions_sub.add_parser(instr_name, help=f"Output {instr_name} instructions")
 
+    # claims
+    p_claims = sub.add_parser("claims", help="Claim-ledger utilities")
+    claims_sub = p_claims.add_subparsers(dest="claims_action")
+    p_claims_audit = claims_sub.add_parser(
+        "audit", help="Audit public claims and forbidden phrases"
+    )
+    p_claims_audit.add_argument(
+        "--require-signoffs",
+        action="store_true",
+        help=(
+            "Also verify every public-facing surface has a sign-off YAML for "
+            "each publishable claim it references. Missing sign-offs fail audit."
+        ),
+    )
+    p_claims_signoff = claims_sub.add_parser(
+        "signoff",
+        help="Generate a public-claim sign-off YAML (spec §20.4)",
+    )
+    p_claims_signoff.add_argument("claim_id", help="Claim ledger id to sign off")
+    p_claims_signoff.add_argument(
+        "--surface", required=True, help="Path to the public-facing file"
+    )
+    p_claims_signoff.add_argument(
+        "--reviewer", required=True, help="Reviewer name (maintainer signing off)"
+    )
+
+    # schema — topology-layer SQLite migrations. Kept separate from legacy
+    # `mempalace migrate`, which upgrades/rebuilds ChromaDB palace storage.
+    p_schema = sub.add_parser("schema", help="Schema migration utilities")
+    schema_sub = p_schema.add_subparsers(dest="schema_action")
+    p_schema_migrate = schema_sub.add_parser("migrate", help="Apply or roll back schema migrations")
+    p_schema_migrate.add_argument("direction", choices=["up", "down"], help="Migration direction")
+    p_schema_migrate.add_argument("--target", default=None, help="Target migration version")
+    p_schema_migrate.add_argument("--db", default=None, help="SQLite DB path (default: palace KG DB)")
+    p_schema_status = schema_sub.add_parser("status", help="Show schema migration status")
+    p_schema_status.add_argument("--db", default=None, help="SQLite DB path (default: palace KG DB)")
+
     # repair
     p_repair = sub.add_parser(
         "repair",
@@ -1539,6 +1672,20 @@ def main():
             return
         args.name = name
         cmd_instructions(args)
+        return
+
+    if args.command == "claims":
+        if not getattr(args, "claims_action", None):
+            p_claims.print_help()
+            return
+        cmd_claims(args)
+        return
+
+    if args.command == "schema":
+        if not getattr(args, "schema_action", None):
+            p_schema.print_help()
+            return
+        cmd_schema(args)
         return
 
     dispatch = {

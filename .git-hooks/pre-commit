@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# MemPalace pre-commit hook.
+#
+# Runs three fast gates before allowing a commit:
+#   1. mempalace claims audit        — public-claim ledger + forbidden phrases.
+#   2. ruff check .                  — lint.
+#   3. pytest (fast subset)          — claims + ablation + adapters + signoff.
+#
+# Install with: scripts/install_git_hooks.sh
+#
+# To skip in an emergency: `git commit --no-verify`. Use sparingly — the
+# claims audit is the gate that keeps unsupported public claims out of
+# the repo.
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# Pick a Python that has the project installed. Prefer the project venv,
+# fall back to whatever `python` is on PATH.
+if [ -x ".venv/bin/python" ]; then
+    PY=".venv/bin/python"
+else
+    PY="python"
+fi
+
+echo "[pre-commit] claims audit..."
+"$PY" -m mempalace claims audit
+
+echo "[pre-commit] ruff check..."
+"$PY" -m ruff check .
+
+echo "[pre-commit] fast test subset..."
+"$PY" -m pytest \
+    tests/test_claims.py \
+    tests/test_ablation_runner.py \
+    tests/test_benchmark_adapters.py \
+    tests/test_signoff.py \
+    -q -p no:cacheprovider
+
+echo "[pre-commit] all gates passed."

@@ -323,7 +323,47 @@ class KnowledgeGraph:
                         adapter_name,
                     ),
                 )
+                self._record_gap_events_if_enabled(
+                    conn,
+                    triple_id,
+                    sub_id,
+                    pred,
+                    obj_id,
+                    valid_from=valid_from,
+                    valid_to=valid_to,
+                    source_drawer_id=source_drawer_id,
+                )
                 return triple_id
+
+    def _record_gap_events_if_enabled(
+        self,
+        conn,
+        triple_id: str,
+        subject_id: str,
+        predicate: str,
+        object_id: str,
+        valid_from: str = None,
+        valid_to: str = None,
+        source_drawer_id: str = None,
+    ) -> None:
+        """Run plan-compatible auto-gap detection when the feature flag is enabled."""
+        try:
+            from .graph.gap_graph import auto_detect_gap_on_triple_write, gap_graph_enabled
+
+            if not gap_graph_enabled():
+                return
+            auto_detect_gap_on_triple_write(
+                conn,
+                triple_id,
+                subject_id,
+                predicate,
+                object_id,
+                valid_from=valid_from,
+                source_drawer_id=source_drawer_id,
+            )
+        except Exception:
+            # Gap recording is observational and must never break canonical KG writes.
+            return
 
     def invalidate(self, subject: str, predicate: str, obj: str, ended: str = None):
         """Mark a relationship as no longer valid (set valid_to date/time)."""

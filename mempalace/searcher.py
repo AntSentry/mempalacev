@@ -777,6 +777,19 @@ def search_memories(
     # the BM25-only fallback below.
     _validate_candidate_strategy(candidate_strategy)
 
+    if os.environ.get("MEMPALACE_ENABLE_FUSION", "").lower() in {"1", "true", "yes", "on"}:
+        return _fused_search(
+            query,
+            palace_path,
+            wing=wing,
+            room=room,
+            n_results=n_results,
+            max_distance=max_distance,
+            vector_disabled=vector_disabled,
+            candidate_strategy=candidate_strategy,
+            collection_name=collection_name,
+        )
+
     if vector_disabled:
         return _bm25_only_via_sqlite(
             query,
@@ -995,4 +1008,114 @@ def search_memories(
         "filters": {"wing": wing, "room": room},
         "total_before_filter": len(_first_or_empty(drawer_results, "documents")),
         "results": hits,
+    }
+
+
+def _legacy_search_memories_for_fusion(
+    query: str,
+    palace_path: str,
+    wing: str = None,
+    room: str = None,
+    n_results: int = 5,
+    max_distance: float = 0.0,
+    vector_disabled: bool = False,
+    candidate_strategy: str = "vector",
+    collection_name: str = None,
+) -> dict:
+    old_value = os.environ.pop("MEMPALACE_ENABLE_FUSION", None)
+    try:
+        return search_memories(
+            query,
+            palace_path,
+            wing=wing,
+            room=room,
+            n_results=n_results,
+            max_distance=max_distance,
+            vector_disabled=vector_disabled,
+            candidate_strategy=candidate_strategy,
+            collection_name=collection_name,
+        )
+    finally:
+        if old_value is not None:
+            os.environ["MEMPALACE_ENABLE_FUSION"] = old_value
+
+
+def _fused_search(
+    query: str,
+    palace_path: str,
+    wing: str = None,
+    room: str = None,
+    n_results: int = 5,
+    max_distance: float = 0.0,
+    vector_disabled: bool = False,
+    candidate_strategy: str = "vector",
+    collection_name: str = None,
+) -> dict:
+    """Feature-flagged RRF search path that preserves the legacy candidate floor."""
+
+    from .retrieval.fusion import RouteHit, rrf_score
+    from .retrieval.query_frame import extract_query_frame
+    from .retrieval import default_generators
+
+    baseline = _legacy_search_memories_for_fusion(
+        query,
+        palace_path,
+        wing=wing,
+        room=room,
+        n_results=n_results,
+        max_distance=max_distance,
+        vector_disabled=vector_disabled,
+        candidate_strategy=candidate_strategy,
+        collection_name=collection_name,
+    )
+    if "error" in baseline:
+        return baseline
+
+    hits = []
+    baseline_by_id = {}
+    for rank, item in enumerate(baseline.get("results", []), start=1):
+        drawer_id = item.get("drawer_id") or item.get("id") or item.get("source_file") or f"baseline:{rank}"
+        baseline_by_id[drawer_id] = item
+        hits.append(RouteHit("baseline", drawer_id, rank, raw_score=item.get("similarity"), reason="legacy baseline", payload=item))
+
+    frame = extract_query_frame(query, wing=wing, room=room)
+    for generator in default_generators():
+        try:
+            hits.extend(generator.candidates(frame, max(n_results, 5)))
+        except Exception:
+            logger.debug("Fusion generator failed: %s", getattr(generator, "name", generator), exc_info=True)
+
+    # RFC T3c: load learned weights when MEMPALACE_USE_LEARNED_WEIGHTS=1.
+    # When the flag is off the loader returns {} and rrf_score uses the
+    # uniform default — baseline behavior is preserved.
+    from .retrieval.weight_loader import load_route_weights
+
+    learned_weights = load_route_weights()
+    ranked = rrf_score(hits, route_weights=learned_weights or None)
+    results = []
+    for candidate in ranked:
+        payload = dict(candidate.payload or {})
+        payload.setdefault("drawer_id", candidate.drawer_id)
+        payload["fusion_score"] = round(candidate.score, 6)
+        payload["routes"] = [hit.route for hit in candidate.route_hits]
+        payload["matched_via"] = "fusion"
+        results.append(payload)
+
+    # Preserve P5: the candidate pool retains every baseline top-N result even
+    # if synthetic route hits outrank them. The returned top-N still uses RRF.
+    pool_ids = {item.get("drawer_id") or item.get("id") or item.get("source_file") for item in results}
+    for drawer_id, item in baseline_by_id.items():
+        if drawer_id not in pool_ids:
+            preserved = dict(item)
+            preserved.setdefault("drawer_id", drawer_id)
+            preserved["matched_via"] = "baseline_floor"
+            results.append(preserved)
+
+    return {
+        "query": query,
+        "filters": {"wing": wing, "room": room},
+        "total_before_filter": baseline.get("total_before_filter", len(baseline.get("results", []))),
+        "results": results[:n_results],
+        "candidate_pool": results,
+        "fusion_enabled": True,
     }

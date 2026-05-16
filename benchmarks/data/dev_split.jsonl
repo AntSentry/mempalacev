@@ -1,0 +1,10 @@
+{"id":"dev-001","question":"What database does the auth service use today?","expected_drawer_ids":["drawer_auth_pg16"],"metadata":{"category":"current_fact"}}
+{"id":"dev-002","question":"What is Alex's current role?","expected_drawer_ids":["drawer_alex_staff"],"metadata":{"category":"current_fact"}}
+{"id":"dev-003","question":"What framework does the frontend use?","expected_drawer_ids":["drawer_fe_svelte"],"metadata":{"category":"current_fact"}}
+{"id":"dev-004","question":"Which vector store does retrieval use?","expected_drawer_ids":["drawer_vec_chroma"],"metadata":{"category":"current_fact"}}
+{"id":"dev-005","question":"How long are sprints?","expected_drawer_ids":["drawer_sprint_two"],"metadata":{"category":"current_fact"}}
+{"id":"dev-006","question":"Where is the team offsite this quarter?","expected_drawer_ids":["drawer_offsite_denver"],"metadata":{"category":"current_fact"}}
+{"id":"dev-007","question":"Who leads the topology workstream?","expected_drawer_ids":["drawer_lead_liu"],"metadata":{"category":"current_fact"}}
+{"id":"dev-008","question":"What runtime runs the worker pool?","expected_drawer_ids":["drawer_worker_bun"],"metadata":{"category":"current_fact"}}
+{"id":"dev-009","question":"What does the planning room cover across research and journal?","expected_drawer_ids":["drawer_research_planning","drawer_journal_planning"],"metadata":{"category":"cross_wing"}}
+{"id":"dev-010","question":"What is the production Python version?","expected_drawer_ids":["drawer_py_313"],"metadata":{"category":"current_fact"}}

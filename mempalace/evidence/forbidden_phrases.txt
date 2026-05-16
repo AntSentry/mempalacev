@@ -1,0 +1,10 @@
+(?i)dramatically improves
+(?i)solves memory
+(?i)best memory system
+(?i)higher-dimensional memory
+(?i)free energy
+(?i)reactionless
+(?i)antigravity
+(?i)cures? (cancer|disease|illness)
+(?i)consciousness (algorithm|equation)
+(?i)proven by (vortex|vbm|rodin)
