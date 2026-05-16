@@ -724,7 +724,7 @@ def _apply_candidate_strategy(
         merger(hits, query, palace_path, wing, room, n_results, max_distance=max_distance)
 
 
-def search_memories(
+def search_memories(  # noqa: C901  — hot path (287 lines, 26 cyclomatic vs limit 25); splitting carries behavioral regression risk; tracked as a refactor candidate, not a defect.
     query: str,
     palace_path: str,
     wing: str = None,

@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 import sqlite3
-from typing import List, Optional, Sequence
+from typing import List, Optional
 
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent

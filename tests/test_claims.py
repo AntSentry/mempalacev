@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from mempalace.evidence.claims import (
     Claim,
     Evidence,

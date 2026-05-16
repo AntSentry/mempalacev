@@ -27,8 +27,27 @@ os.environ["HOMEDRIVE"] = os.path.splitdrive(_session_tmp)[0] or "C:"
 os.environ["HOMEPATH"] = os.path.splitdrive(_session_tmp)[1] or _session_tmp
 
 # Now it is safe to import mempalace modules that trigger initialisation.
-import chromadb  # noqa: E402
+# chromadb is imported lazily so test collection can proceed even when the
+# heavy stack (onnxruntime + ChromaDB transitive deps) is unavailable. Tests
+# that need a real Chroma collection use the ``chromadb_or_skip`` fixture and
+# pytest.skip cleanly when the import fails.
+try:
+    import chromadb  # noqa: E402,F401
+    _CHROMADB_AVAILABLE = True
+    _CHROMADB_IMPORT_ERROR = None
+except ImportError as exc:  # pragma: no cover — exercised on bare envs
+    chromadb = None  # type: ignore[assignment]
+    _CHROMADB_AVAILABLE = False
+    _CHROMADB_IMPORT_ERROR = str(exc)
 import pytest  # noqa: E402
+
+
+@pytest.fixture
+def chromadb_or_skip():
+    """Yield the chromadb module or skip the test if it is not importable."""
+    if not _CHROMADB_AVAILABLE:
+        pytest.skip(f"chromadb unavailable in this environment: {_CHROMADB_IMPORT_ERROR}")
+    return chromadb
 
 from mempalace.config import MempalaceConfig  # noqa: E402
 from mempalace.knowledge_graph import KnowledgeGraph  # noqa: E402

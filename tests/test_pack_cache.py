@@ -10,11 +10,6 @@ Covers:
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
-import pytest
-
 from mempalace.evidence.evidence_pack import EvidencePack, build_evidence_pack
 from mempalace.evidence.pack_cache import (
     DEFAULT_MAX_ENTRIES,

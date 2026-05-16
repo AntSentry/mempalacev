@@ -25,7 +25,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, List, Optional
 
 
 SLOT_ORDER = [
